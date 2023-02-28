@@ -1,5 +1,5 @@
-<img src="assets/appicon.png" style="width: 1.15em; height: 1.15em; vertical-align: text-bottom;"/> Laser Calibration Tool
-=========================================================================================================================
+<img src="docs/assets/appicon.png" style="width: 1.15em; height: 1.15em; vertical-align: text-bottom;"/> Laser Calibration Tool
+===============================================================================================================================
 
 <p align="center">
 	<a href="https://github.com/daniel-starke/LaserCalibrationTool/deployments/activity_log?environment=github-pages"><img src="https://img.shields.io/github/deployments/daniel-starke/LaserCalibrationTool/github-pages?label=Deployment"/></a>

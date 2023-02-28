@@ -1,0 +1,27 @@
+{
+  "name": "Laser Calibration Tool",
+  "short_name": "LCT",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "description": "Tool to calibrate laser cutters.",
+  "related_applications": [{
+    "platform": "github",
+    "url": "https://github.com/daniel-starke/LaserCalibrationTool"
+  }],
+  "icons": [
+    {
+      "src": "./assets/appicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+	  "purpose": "any"
+    },
+    {
+      "src": "./assets/appicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+	  "purpose": "maskable"
+    }
+  ],
+  "theme_color": "#333",
+  "background_color": "#FFF"
+}

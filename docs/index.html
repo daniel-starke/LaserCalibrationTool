@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<!--
+@file index.html
+@author Daniel Starke
+@copyright Copyright 2022-2023 Daniel Starke
+@date 2022-11-13
+@version 2023-02-25
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!-- PWA requirements: https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Installable_PWAs -->
+<meta name="application-name" content="Laser Calibration Tool">
+<!-- Include these early and directly so they happen first -->
+<script>
+	/* Install Laser Calibration Tool as a Progressive Web App for Offline Access
+	 * This needs to be put before ANY HTTP Requests are made, so it can cache them. */
+	if ("serviceWorker" in navigator) {
+		navigator.serviceWorker.register("sw.js").then(function(registration) {
+			registration.update(); /* Always update the registration for the latest assets */
+		}, function() {
+			console.log("Could not register Laser Calibration Tool for offline use!");
+		});
+	} else {
+		console.log("Browser does not support offline access!");
+	}
+</script>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="shortcut icon" href="assets/favicon.ico" type='image/x-icon' >
+<link rel="apple-touch-icon" href="assets/appicon.png">
+<title>Laser Calibration Tool</title>
+<style>
+html {
+    height: calc(100% - 2em);
+}
+
+body {
+	display: block;
+	margin-left: auto;
+	margin-right: auto;
+	width: 90%;
+	height: 100%;
+	font-family: Fira code, Fira Mono, Consolas, Menlo, Courier, monospace;
+	font-size: 14pt;
+	line-height: 1.5;
+}
+
+h1 {
+	text-align: center;
+	font-size: 1.7em;
+	white-space: nowrap;
+}
+
+tr td {
+	padding-left: 0.2em;
+	padding-right: 0.2em;
+	vertical-align: top;
+}
+
+tr td:first-child, td:nth-child(2) {
+	width: 1%;
+	white-space: nowrap;
+}
+
+input[type="text"] {
+	width: 10em;
+	font-family: inherit;
+	font-size: inherit;
+}
+
+select {
+	width: 100%;
+	font-family: inherit;
+	font-size: inherit;
+}
+
+textarea {
+	width: calc(100% - 2em);
+	font-family: inherit;
+	font-size: inherit;
+}
+
+button {
+	margin: 0.3em 0 0.3em 0;
+	min-height: 1.9em;
+	font-family: inherit;
+	font-size: inherit;
+}
+
+img {
+	height: 1.15em;
+	width: 1.15em;
+	vertical-align: text-bottom;
+}
+
+.desc {
+	white-space: normal !important;
+}
+
+.center {
+	margin: auto;
+	width: 90%;
+	padding: 1em;
+}
+
+.copyright {
+	display: block;
+	position: fixed;
+	overflow: hidden;
+	bottom: 0.5em;
+	left: 0;
+	width: calc(100% - 2em);
+	font-size: 0.7em;
+	padding: 0 1em 0 1em;
+}
+
+.copyright a {
+	color: inherit;
+}
+
+#preview {
+	width: calc(100% - 2em + 6px);
+	display: block;
+	border: solid #999 1px;
+}
+
+#gcode {
+	white-space: pre;
+	overflow-wrap: normal;
+	overflow-x: scroll;
+}
+
+@media screen and (max-width: 900px) {
+	body {
+		font-size: 10pt;
+	}
+	h1 {
+		font-size: 1.3em;
+	}
+	.copyright {
+		font-size: 4.5pt;
+	}
+}
+</style>
+</head>
+<body>
+<h1><img src="assets/appicon.png"/> Laser Calibration Tool</h1>
+<table border="0" class="center">
+<tbody>
+<tr><td width="0%">Preset:</td><td><select name="preset" id="preset"/></td><td></td></tr>
+<tr><td>Speed Travel [mm/min]:</td><td><input type="text" id="speedTravel"/></td><td class="desc">Travel speed.</td></tr>
+<tr><td>Speed Engrave [mm/min]:</td><td><input type="text" id="speedEngrave"/></td><td class="desc">Engraving speed.</td></tr>
+<tr><td>Speed Cut [mm/min]:</td><td><input type="text" id="speedCut"/></td><td class="desc">Cutting speed.</td></tr>
+<tr><td>Power Engrave [%]:</td><td><input type="text" id="powerEngrave"/></td><td class="desc">Laser output power for engravings.</td></tr>
+<tr><td>Power Cut [%]:</td><td><input type="text" id="powerCut"/></td><td class="desc">Laser output power for cuts.</td></tr>
+<tr><td>Length [mm]:</td><td><input type="text" id="length"/></td><td class="desc">Minimal line length.</td></tr>
+<tr><td>Stepping X/Y [mm]:</td><td><input type="text" id="steppingXY"/></td><td class="desc">Single calibration step size in X/Y direction.</td></tr>
+<tr><td>Stepping Z [mm]:</td><td><input type="text" id="steppingZ"/></td><td class="desc">Single calibration step size in Z direction.</td></tr>
+<tr><td></td><td colspan="2"><input type="checkbox" id="backlashPatternX" checked="checked"><label for="backlashPatternX">Enable horizontal backlash calibration pattern.</label></td></tr>
+<tr><td></td><td colspan="2"><input type="checkbox" id="backlashPatternY" checked="checked"><label for="backlashPatternY">Enable vertical backlash calibration pattern.</label></td></tr>
+<tr><td></td><td colspan="2"><input type="checkbox" id="spotSizePatternX" checked="checked"><label for="spotSizePatternX">Enable horizontal spot size calibration pattern.</label></td></tr>
+<tr><td></td><td colspan="2"><input type="checkbox" id="spotSizePatternY" checked="checked"><label for="spotSizePatternY">Enable vertical spot size calibration pattern.</label></td></tr>
+<tr><td></td><td colspan="2"><input type="checkbox" id="focusPatternZ" checked="checked"><label for="focusPatternZ">Enable spot focus length calibration pattern.</label></td></tr>
+<tr><td>Start Gcode:</td><td colspan="2"><textarea rows="5" id="startGcode"></textarea></td></tr>
+<tr><td>End Gcode:</td><td colspan="2"><textarea rows="5" id="endGcode"></textarea></td></tr>
+<tr><td></td><td style="height: 0px; padding-right: 1.7em;" colspan="2"><button id="generate" type="button" style="float: left">Generate</button><button id="reset" type="button" style="float: right">Reset</button></td></tr>
+<tr><td></td><td colspan="2"><input type="checkbox" id="showTravel" colspan="2"><label for="showTravel">Show travel path in preview.</label></td></tr>
+<tr><td>Preview:</td><td colspan="2"><div id="preview"></div></td></tr>
+<tr><td></td><td colspan="2"><label id="stats"></label></td></tr>
+<tr><td>Generated Gcode:</td><td colspan="2"><textarea rows="15" id="gcode"></textarea></td><td>&nbsp;</td></tr>
+<tr><td></td><td style="height: 0px; padding-right: 1.7em;" colspan="2"><button id="download" type="button" style="float: left">Download</button></td></tr>
+</tbody>
+</table>
+</br>
+<div class="copyright">
+<span style="float: left;">&copy;2022-2023 Daniel Starke</span>
+<span style="float: right;">found on <a href="https://github.com/daniel-starke/LaserCalibrationTool">Github.com</a></span>
+</div>
+
+<script src="assets/Parser.js"></script>
+<script src="assets/Path.js"></script>
+
+<script>
+(function () {
+	/* HTML elements */
+	var ePreset = document.getElementById("preset");
+	var eSpeedTravel = document.getElementById("speedTravel");
+	var eSpeedEngrave = document.getElementById("speedEngrave");
+	var eSpeedCut = document.getElementById("speedCut");
+	var ePowerEngrave = document.getElementById("powerEngrave");
+	var ePowerCut = document.getElementById("powerCut");
+	var eLength = document.getElementById("length");
+	var eSteppingXY = document.getElementById("steppingXY");
+	var eSteppingZ = document.getElementById("steppingZ");
+	var eBacklashPatternX = document.getElementById("backlashPatternX");
+	var eBacklashPatternY = document.getElementById("backlashPatternY");
+	var eSpotSizePatternX = document.getElementById("spotSizePatternX");
+	var eSpotSizePatternY = document.getElementById("spotSizePatternY");
+	var eFocusPatternZ = document.getElementById("focusPatternZ");
+	var eStartGcode = document.getElementById("startGcode");
+	var eEndGcode = document.getElementById("endGcode");
+	var eReset = document.getElementById("reset");
+	var eGenerate = document.getElementById("generate");
+	var eShowTravel = document.getElementById("showTravel");
+	var ePreview = document.getElementById("preview");
+	var eStats = document.getElementById("stats");
+	var eGcode = document.getElementById("gcode");
+	var eDownload = document.getElementById("download");
+	var eTextDownload = window.document.createElement("a");
+	var gcodeBlob = null;
+
+	/**
+	 * Converts a number to a string with a given maximum
+	 * number of digits after the decimal point.
+	 *
+	 * @param[in] num - number to convert
+	 * @param[in] digits - maximum number of trailing digits
+	 * @return converted number as string
+	 */
+	var strNum = (function (num, digits = 0) {
+		return parseFloat(num.toFixed(digits)).toString();
+	});
+
+	/* Preset Handling */
+	var Preset = (function (name, speedTravel, speedEngrave, speedCut, powerEngrave, powerCut) {
+		this.name         = name;
+		this.speedTravel  = speedTravel;
+		this.speedEngrave = speedEngrave;
+		this.speedCut     = speedCut;
+		this.powerEngrave = powerEngrave;
+		this.powerCut     = powerCut;
+	});
+
+	presets = {
+		"sm200":   new Preset("Snapmaker 0.2W", 2400, 1400,  300, 100, 100),
+		"sm1600":  new Preset("Snapmaker 1.6W", 2400, 1800,  800,  30,  90),
+		"sm10000": new Preset("Snapmaker 10W",  2400, 1800, 1800,  16,  90),
+	};
+
+	for (var key in presets) {
+		var item = document.createElement("option");
+		item.value = key;
+		item.text = presets[key].name;
+		ePreset.appendChild(item);
+	}
+	ePreset.addEventListener("change", function (e) {
+		var preset = presets[ePreset.value];
+		eSpeedTravel.value = preset.speedTravel;
+		eSpeedEngrave.value = preset.speedEngrave;
+		eSpeedCut.value = preset.speedCut;
+		ePowerEngrave.value = preset.powerEngrave;
+		ePowerCut.value = preset.powerCut;
+	});
+
+	/* Settings */
+	function setDefaults() {
+		ePreset.value = "sm10000"; /* set default */
+		ePreset.dispatchEvent(new Event('change'));
+		eLength.value = "6";
+		eSteppingXY.value = "0.02";
+		eSteppingZ.value = "0.2";
+		eStartGcode.value = "M425 F0 ; Disable Backlash Compensation";
+		eEndGcode.value = "";
+		ePreview.replaceChildren();
+		ePreview.style.paddingTop = "2em";
+		eStats.innerText = "";
+		eGcode.value = "";
+	}
+	eReset.addEventListener("click", function () {
+		setDefaults();
+	});
+	setDefaults();
+
+	/* Path Generation */
+	/* Generates the horizontal legend. */
+	function horizontalLegend(params) {
+		var path = new Path;
+		var scale = {x: params.length, y: params.length};
+		path.addStr(params.steppingXY.toString(), params.length / 2, 0, 0);
+		for (var n = 0; n <= 10; n++) {
+			if (n == 10) {
+				scale.x /= 2;
+			}
+			path.addStr(n.toString(), scale, ((n + 1.75) * params.length * 1.5) + (params.overlength / 2), 0);
+		}
+		return path;
+	}
+	/* Generates the horizontal backlash calibration pattern. */
+	function backlashPatternX(params) {
+		var path = new Path;
+		/* legend */
+		path.addStr("BX", params.length, 0, 0);
+		/* paths */
+		for (var x = 0; x <= 10; x++) {
+			var center = ((x + 1.75) * params.length * 1.5) + ((params.length + params.overlength) / 2);
+			for (var n = 0; n <= Math.floor(params.length); n++) {
+				/* right side */
+				path.travelAlwaysTo(center, n);
+				path.travelAlwaysTo(center + (params.length / 2), n);
+				if ((n % 2) == 0) {
+					path.travelAlways(x * -params.steppingXY, 0);
+				}
+				path.cutTo(center, n);
+				/* left side */
+				path.travelAlwaysTo(center - (params.length / 2), n);
+				if ((n % 2) == 0) {
+					path.travelAlways(x * params.steppingXY, 0);
+				}
+				path.cutTo(center, n);
+			}
+		}
+		return path;
+	}
+	/* Generates the vertical backlash calibration pattern. */
+	function backlashPatternY(params) {
+		var path = new Path;
+		/* legend */
+		path.addStr("BY", params.length, 0, 0);
+		/* paths */
+		for (var y = 0; y <= 10; y++) {
+			var left = ((y + 1.75) * params.length * 1.5) + (params.overlength / 2);
+			var center = params.length / 2;
+			for (var n = 0; n <= Math.floor(params.length); n++) {
+				/* top side */
+				path.travelAlwaysTo(left + n, center);
+				path.travelAlwaysTo(left + n, center + (params.length / 2));
+				if ((n % 2) == 0) {
+					path.travelAlways(0, y * -params.steppingXY);
+				}
+				path.cutTo(left + n, center);
+				/* bottom side */
+				path.travelAlwaysTo(left + n, center - (params.length / 2));
+				if ((n % 2) == 0) {
+					path.travelAlways(0, y * params.steppingXY);
+				}
+				path.cutTo(left + n, center);
+			}
+		}
+		return path;
+	}
+	/* Generates the horizontal spot size calibration pattern. */
+	function spotSizePatternX(params) {
+		var path = new Path;
+		/* legend */
+		path.addStr("SX", params.length, 0, 0);
+		/* paths */
+		for (var x = 0; x <= 10; x++) {
+			var center = ((x + 1.75) * params.length * 1.5) + ((params.length + params.overlength) / 2);
+			for (var n = 0; n <= Math.floor(params.length); n++) {
+				/* left side */
+				path.travelTo(center - (params.length / 2), n);
+				path.cutTo(center - (x * params.steppingXY), n);
+				/* right side */
+				path.travelTo(center + (x * params.steppingXY), n);
+				path.cutTo(center + (params.length / 2), n);
+			}
+		}
+		return path;
+	}
+	/* Generates the vertical spot size calibration pattern. */
+	function spotSizePatternY(params) {
+		var path = new Path;
+		/* legend */
+		path.addStr("SY", params.length, 0, 0);
+		/* paths */
+		for (var y = 0; y <= 10; y++) {
+			var left = ((y + 1.75) * params.length * 1.5) + (params.overlength / 2);
+			var center = params.length / 2;
+			for (var n = 0; n <= Math.floor(params.length); n++) {
+				/* bottom side */
+				path.travelTo(left + n, center - (params.length / 2));
+				path.cutTo(left + n, center - (y * params.steppingXY));
+				/* top side */
+				path.travelTo(left + n, center + (y * params.steppingXY));
+				path.cutTo(left + n, center + (params.length / 2));
+			}
+		}
+		return path;
+	}
+	/* Generates the focus length calibration pattern. */
+	function focusPatternZ(params) {
+		var path = new Path;
+		/* legend */
+		path.addStr("FZ", params.length, 0, 0);
+		path.addStr(params.steppingZ.toString(), params.length / 2, 0, params.length * 1.25);
+		for (var z = 0; z <= 10; z++) {
+			var i = z - 5;
+			path.addStr(i.toString().padStart(2, " "), params.length / 2, (z + 1.75) * params.length * 1.5, params.length * 1.25);
+		}
+		/* paths */
+		for (var z = 0; z <= 10; z++) {
+			var i = z - 5;
+			var center = ((z + 1.75) * params.length * 1.5) + ((params.length + params.overlength) / 2);
+			for (var n = 0; n <= Math.floor(params.length); n++) {
+				var k = n - Math.floor(params.length / 2);
+				path.travelTo(center - (params.length / 2), n, (i + k) * params.steppingZ);
+				if (n == Math.floor(params.length / 2)) {
+					path.travel(-params.overlength / 2);
+					path.cut(params.length + (params.overlength / 2));
+				} else {
+					path.cut(params.length);
+				}
+			}
+		}
+		return path;
+	}
+
+	/* Preview */
+	/**
+	 * Creates a SVG based preview and updates the associated element
+	 * from the given path object.
+	 *
+	 * @param[in] path - show this path
+	 */
+	function updatePreview(path) {
+		var makeNode = (function (n, v) {
+			var n = document.createElementNS("http://www.w3.org/2000/svg", n);
+			for (var p in v) {
+				n.setAttributeNS(
+					null,
+					/* Convert Camel-case attribute names. */
+					p.replace(
+						/[A-Z]/g,
+						function (m, p, o, s) {
+							return "-" + m.toLowerCase();
+						}
+					),
+					v[p]
+				);
+			}
+			return n
+		});
+		var makePath = (function (p, s, w, o = 1) {
+			return makeNode("path", {d: p, stroke: s, strokeWidth: w, strokeOpacity: o, fillOpacity: 0, strokeLinejoin: "round", strokeLinecap: "round"});
+		});
+		var svg = makeNode("svg");
+		path.flipY();
+		/* draw paths */
+		var travelPath = "";
+		var engravePath = "";
+		var cutPath = "";
+		var last = null;
+		path.result.forEach(function (item) {
+			if ( ! item ) return;
+			if ( last ) {
+				if (item.m == PathItem.TRAVEL || item.m == PathItem.TRAVEL_ALWAYS) {
+					if ((last.m != PathItem.TRAVEL && last.m != PathItem.TRAVEL_ALWAYS) || travelPath.length == 0) {
+						travelPath += "M" + strNum(last.x, 2) + "," + strNum(last.y, 2);
+					}
+					travelPath += "L" + strNum(item.x, 2) + "," + strNum(item.y, 2);
+				} else if (item.m == PathItem.ENGRAVE) {
+					if (last.m != PathItem.ENGRAVE || engravePath.length == 0) {
+						engravePath += "M" + strNum(last.x, 2) + "," + strNum(last.y, 2);
+					}
+					engravePath += "L" + strNum(item.x, 2) + "," + strNum(item.y, 2);
+				} else if (item.m == PathItem.CUT) {
+					if (last.m != PathItem.CUT || cutPath.length == 0) {
+						cutPath += "M" + strNum(last.x, 2) + "," + strNum(last.y, 2);
+					}
+					cutPath += "L" + strNum(item.x, 2) + "," + strNum(item.y, 2);
+				}
+			}
+			last = item;
+		});
+		if (showTravel.checked === true && travelPath.length > 0) {
+			svg.appendChild(makePath(travelPath, "#6699FF", "0.1mm", 1));
+		}
+		if (engravePath.length > 0) {
+			svg.appendChild(makePath(engravePath, "#FF0000", "0.15mm", 0.4));
+		}
+		if (cutPath.length > 0) {
+			svg.appendChild(makePath(cutPath, "#FF0000", "0.15mm", 0.8));
+		}
+		/* set dimensions */
+		var size = path.size();
+		svg.setAttributeNS(null, "viewBox", "-1 -1 " + strNum(size.maxX + 1, 2) + " " + strNum(size.maxY + 1, 2));
+		svg.setAttributeNS(null, "width", strNum(size.maxX, 2) + "mm");
+		svg.setAttributeNS(null, "height", strNum(size.maxY, 2) + "mm");
+		ePreview.replaceChildren(svg);
+		ePreview.style.paddingTop = "0";
+		path.flipY(); /* revert */
+	}
+
+	/**
+	 * Converts the preview image to a Base64 encoded PNG.
+	 *
+	 * @param[in] width - output image width
+	 * @param[in] height - output image height
+	 * @param[in] callback - called after conversion with the data as single argument
+	 */
+	function previewToThumbnail(width, height, callback) {
+		var svgData = "data:image/svg+xml;base64," + btoa(new XMLSerializer().serializeToString(ePreview.firstChild));
+		var canvas = document.createElement("canvas");
+		var context = canvas.getContext("2d");
+		canvas.width = width;
+		canvas.height = height;
+		var image = new Image();
+		image.onload = function () {
+			context.fillStyle = "#FFFFFF";
+			context.fillRect(0, 0, width, height);
+			context.drawImage(image, 0, 0, width, height);
+			callback(canvas.toDataURL("image/png"));
+		};
+		image.src = svgData;
+	}
+
+	/* Gcode Output */
+	/**
+	 * Creates the Gcode and updates the associated element
+	 * from the given path object.
+	 *
+	 * @param[in] path - show this path
+	 * @param[in] params - parameter set
+	 */
+	function updateGcode(path, params) {
+		var size = path.size();
+		var header =
+			";Header Start\n" +
+			";header_type: laser\n" +
+			";file_total_lines: {lines}\n" +
+			";estimated_time(s): {time}\n" +
+			";is_rotate: false\n" +
+			";diameter: 40\n" +
+			";max_x(mm): " + strNum(size.maxX, 2) + "\n" +
+			";max_y(mm): " + strNum(size.maxY, 2) + "\n" +
+			";max_z(mm): " + strNum(size.maxZ, 2) + "\n" +
+			";max_b(mm): 0\n" +
+			";min_x(mm): " + strNum(size.minX, 2) + "\n" +
+			";min_y(mm): " + strNum(size.minY, 2) + "\n" +
+			";min_z(mm): " + strNum(size.minZ, 2) + "\n" +
+			";min_b(mm): 0\n" +
+			";work_speed(mm/minute): " + strNum(params.speedTravel) + "\n" +
+			";jog_speed(mm/minute): " + strNum(params.speedCut) + "\n" +
+			";power(%): " + strNum(params.powerCut) + "\n" +
+			";thumbnail: {thumbnail}\n" +
+			";Header End\n";
+		var code = "";
+		code += ";LaserCalibrationTool\n";
+		code += "; speedTravel: " + strNum(params.speedTravel, 1) + "\n";
+		code += "; speedEngrave: " + strNum(params.speedEngrave, 1) + "\n";
+		code += "; speedCut: " + strNum(params.speedCut, 1) + "\n";
+		code += "; powerEngrave: " + strNum(params.powerEngrave, 1) + "\n";
+		code += "; powerCut: " + strNum(params.powerCut, 1) + "\n";
+		code += "; length: " + strNum(params.length, 1) + "\n";
+		code += "; steppingXY: " + strNum(params.steppingXY, 2) + "\n";
+		code += "; steppingZ: " + strNum(params.steppingZ, 2) + "\n";
+		/* prolog */
+		code += ";G-code USER START <<<\n";
+		code += eStartGcode.value.replaceAll("\r", "").trim() + "\n";
+		code += ";G-code USER START >>>\n";
+		code += ";G-code START <<<\n";
+		code += "G21\n"; /* millimeter unit */
+		code += "G90\n"; /* absolute positioning */
+		code += "M106 P0 S255\n"; /* fan speed at max */
+		code += "M5\n"; /* laser off */
+		/* path */
+		var last = null;
+		var p = 0; /* current power */
+		var x = 0; /* current x position */
+		var y = 0; /* current y position */
+		var z = 0; /* current z position */
+		var f = 0; /* current moving speed */
+		var dur = 0; /* current duration in seconds */
+		var move = (function (item, power, speed) {
+			var _p = strNum(power);
+			var _s = strNum((power * 2.55));
+			var _x = strNum(item.x, 3);
+			var _y = strNum(item.y, 3);
+			var _z = strNum(item.z, 3);
+			var _f = strNum(speed);
+			if (p != _p) {
+				if (_p == "0") {
+					code += "M5\n";
+				} else {
+					code += "M3 P" + _p + " S" + _s + "\n";
+				}
+				p = parseFloat(_p);
+			}
+			if (p == 0) {
+				code += "G0"; /* linear travel move */
+			} else {
+				code += "G1"; /* linear work move */
+			}
+			if (x != _x) {
+				code += " X" + _x;
+				x = parseFloat(_x);
+			}
+			if (y != _y) {
+				code += " Y" + _y;
+				y = parseFloat(_y);
+			}
+			if (z != _z) {
+				code += " Z" + _z;
+				z = parseFloat(_z);
+			}
+			if (f != _f) {
+				code += " F" + _f;
+				f = parseFloat(_f);
+			}
+			code += "\n";
+		});
+		var dist = (function (a, b) {
+			var _x = b.x - a.x;
+			var _z = b.y - a.y;
+			var _y = b.z - a.z;
+			return Math.sqrt((_x * _x) + (_y * _y) + (_z * _z));
+		});
+		path.result.forEach(function (item) {
+			if ( ! item ) return;
+			if (item.m == PathItem.TRAVEL || item.m == PathItem.TRAVEL_ALWAYS) {
+				move(item, 0, params.speedTravel);
+			} else if (item.m == PathItem.ENGRAVE) {
+				move(item, params.powerEngrave, params.speedEngrave);
+			} else if (item.m == PathItem.CUT) {
+				move(item, params.powerCut, params.speedCut);
+			}
+			if ( last ) {
+				dur += (60 * dist(last, item) / f) + 0.04;
+			}
+			last = item;
+		});
+		/* epilog */
+		code += "M5\n"; /* laser off */
+		code += ";G-code END <<<\n";
+		code += ";G-code USER END <<<\n";
+		code += eEndGcode.value.replaceAll("\r", "").trim() + "\n";
+		code += ";G-code USER END >>>\n";
+		code += "M107 P0\n"; /* fan off */
+		code += "G91\n"; /* relative positioning */
+		code += "G0 Z0 F2400\n"; /* move to top */
+		code += "G90\n"; /* absolute positioning */
+		var lines = (function (str) {
+			return (str.match(/\n/g) || "").length;
+		});
+		var lineCount = lines(header) + lines(code) + 1;
+		previewToThumbnail(300, 150, function (pngData) {
+			eGcode.value = header.replace(/\{[a-z]+\}/g, function (m, p, o, s) {
+				switch (m) {
+				case "{lines}":
+					return lineCount.toString();
+				case "{time}":
+					return strNum(dur, 1);
+				case "{thumbnail}":
+					return pngData.toString();
+				};
+				return m;
+			}) + code;
+			dur = Math.ceil(dur);
+			var mins = Math.floor(dur / 60);
+			var secs = dur - (mins * 60);
+			var time = secs.toString().padStart(2, 0);
+			if (mins > 0) {
+				time = strNum(mins) + ":" + time + " min";
+			} else {
+				time += " sec"
+			}
+			eStats.innerText = "Size: "
+				+ strNum(size.maxX - size.minX, 1) + " x "
+				+ strNum(size.maxY - size.minY, 1) + " x "
+				+ strNum(size.maxZ - size.minZ, 1) + " mm"
+				+ ", Time: ~" + time;
+		});
+	}
+
+	/* "Generate" button click handler */
+	eGenerate.addEventListener("click", function () {
+		var params = {
+			speedTravel: parseFloat(eSpeedTravel.value),
+			speedEngrave: parseFloat(eSpeedEngrave.value),
+			speedCut: parseFloat(eSpeedCut.value),
+			powerEngrave: parseFloat(ePowerEngrave.value),
+			powerCut: parseFloat(ePowerCut.value),
+			length: parseFloat(eLength.value),
+			steppingXY: parseFloat(eSteppingXY.value),
+			steppingZ: parseFloat(eSteppingZ.value),
+			overlength: 2
+		}
+		/* check input values */
+		if (isNaN(params.speedTravel) || params.speedTravel < 1) {
+			alert("Invalid travel speed: " + params.speedTravel);
+			return;
+		}
+		if (isNaN(params.speedEngrave) || params.speedEngrave < 1) {
+			alert("Invalid engraving speed: " + params.speedEngrave);
+			return;
+		}
+		if (isNaN(params.speedCut) || params.speedCut < 1) {
+			alert("Invalid cutting speed: " + params.speedCut);
+			return;
+		}
+		if (isNaN(params.powerEngrave) || params.powerEngrave < 1) {
+			alert("Invalid engraving power: " + params.powerEngrave);
+			return;
+		}
+		if (isNaN(params.powerCut) || params.powerCut < 1) {
+			alert("Invalid cutting power: " + params.powerCut);
+			return;
+		}
+		if (isNaN(params.length) || params.length < 1) {
+			alert("Invalid length: " + params.length);
+			return;
+		}
+		if (isNaN(params.steppingXY) || params.steppingXY < 0.01) {
+			alert("Invalid stepping X/Y: " + params.steppingXY);
+			return;
+		}
+		if (isNaN(params.steppingZ) || params.steppingZ < 0.01) {
+			alert("Invalid stepping Z: " + params.steppingZ);
+			return;
+		}
+		/* generate paths */
+		var path = new Path;
+		if (eBacklashPatternX.checked === true
+			|| eBacklashPatternY.checked === true
+			|| eSpotSizePatternX.checked === true
+			|| eSpotSizePatternY.checked === true) {
+			path = horizontalLegend(params);
+		}
+		var hasPattern = false;
+		if (eBacklashPatternX.checked === true) {
+			path.addBelow(backlashPatternX(params), params.length / 2);
+			hasPattern = true;
+		}
+		if (eBacklashPatternY.checked === true) {
+			path.addBelow(backlashPatternY(params), params.length / 2);
+			hasPattern = true;
+		}
+		if (eSpotSizePatternX.checked === true) {
+			path.addBelow(spotSizePatternX(params), params.length / 2);
+			hasPattern = true;
+		}
+		if (eSpotSizePatternY.checked === true) {
+			path.addBelow(spotSizePatternY(params), params.length / 2);
+			hasPattern = true;
+		}
+		if (eFocusPatternZ.checked === true) {
+			path.addBelow(focusPatternZ(params), params.length / 2);
+			hasPattern = true;
+		}
+		if ( ! hasPattern ) {
+			alert("No calibration pattern selected.");
+			return;
+		}
+		path.optimize();
+		/* correct start position */
+		if (path.result.length > 0) {
+			path.result[0] = new PathItem;
+		}
+		/* update preview */
+		updatePreview(path);
+		/* update Gcode */
+		updateGcode(path, params);
+	});
+
+	/* "Download" button click handler */
+	eDownload.addEventListener("click", function () {
+		var dt = new Date();
+		var dtStr =
+			dt.getFullYear()
+			+ (dt.getMonth() + 1).toString().padStart(2, "0")
+			+ dt.getDate().toString().padStart(2, "0")
+			+ "-"
+			+ dt.getHours().toString().padStart(2, "0")
+			+ dt.getMinutes().toString().padStart(2, "0")
+			+ dt.getSeconds().toString().padStart(2, "0");
+		var filename = "LaserCalibrationTool-" + dtStr + ".nc";
+		if (gcodeBlob instanceof Blob) {
+			window.URL.revokeObjectURL(gcodeBlob);
+		}
+		gcodeBlob = new Blob([eGcode.value], {type: "text/x-gcode"});
+		if ( window.navigator.msSaveOrOpenBlob ) {
+			window.navigator.msSaveBlob(gcodeBlob, filename);
+		} else {
+			eTextDownload.href = window.URL.createObjectURL(gcodeBlob);
+			eTextDownload.download = filename;
+			document.body.appendChild(eTextDownload);
+			eTextDownload.click();
+			document.body.removeChild(eTextDownload);
+		}
+	});
+}());
+</script>
+</body>
+</html>
